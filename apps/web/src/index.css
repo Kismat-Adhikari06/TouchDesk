@@ -25,3 +25,32 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Fullscreen stream shell: fill the screen edge to edge (black letterbox),
+   keep the video uncropped via object-contain, and float the control bar. */
+.stream-shell:fullscreen,
+.stream-shell:-webkit-full-screen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: #000;
+  box-shadow: none;
+}
+
+.stream-shell:fullscreen .stream-stage,
+.stream-shell:-webkit-full-screen .stream-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  aspect-ratio: auto;
+}
+
+.stream-shell:fullscreen .stream-footer,
+.stream-shell:-webkit-full-screen .stream-footer {
+  background: rgba(15, 23, 42, 0.92);
+}
