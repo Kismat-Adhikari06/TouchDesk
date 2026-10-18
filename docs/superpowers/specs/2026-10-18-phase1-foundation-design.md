@@ -1,0 +1,154 @@
+# Phase 1: Project Foundation — Design Spec
+
+**Date:** 2026-10-18
+**Status:** Approved in conversation — awaiting written-spec review
+**Repository:** `connectptod` (local Linux machine, x86_64 Ubuntu)
+
+## 1. Overview
+
+Phase 1 creates the foundation of an open-source, cross-platform remote desktop system that will eventually let users view and control a Windows/macOS/Linux computer from a mobile PWA. This phase establishes the monorepo structure, a runnable Rust desktop agent, an installable React PWA with a minimal dashboard, project documentation, and a verifiable build for both applications.
+
+Development target for this phase: **Linux**.
+
+## 2. Goals
+
+- Clean monorepo: `apps/desktop-agent/`, `apps/web/`, `docs/`.
+- Rust agent that compiles, runs, and prints version + OS + readiness line.
+- React + TypeScript + Vite web app with Tailwind CSS and `vite-plugin-pwa`.
+- Minimal responsive dashboard (app name, "No devices connected", "Connect Device" button, connection status).
+- Working PWA manifest + service worker (installable configuration).
+- README covering overview, requirements, Linux setup, dev commands.
+- Both projects build successfully; build checks reported.
+
+## 3. Non-Goals (explicitly excluded)
+
+- No networking, signaling, WebSocket, or WebRTC of any kind.
+- No screen capture logic (XCap is a declared dependency only).
+- No mouse/keyboard control logic (Enigo is a declared dependency only).
+- No authentication, pairing, or device discovery.
+- No CI, no containers, no workspace/monorepo tooling.
+- No Windows/macOS build verification (Linux first).
+- Nothing from Phases 2+.
+
+## 4. Constraints
+
+- Approach A: plain directories, no Cargo workspace, no npm workspaces, no Turborepo.
+- Minimal dependencies; nothing added unless Phase 1 uses it.
+- Code stays modular enough to extend, but no speculative abstractions.
+- Follow `PROJECT_IDEA.md` for product direction.
+
+## 5. Repository Structure (target)
+
+```
+connectptod/
+├── .gitignore
+├── PROJECT_IDEA.md              # existing product idea (unchanged)
+├── README.md                    # new
+├── scripts/
+│   └── generate-icons.mjs       # PWA icon generator (zero deps)
+├── apps/
+│   ├── desktop-agent/           # cargo project
+│   │   ├── Cargo.toml
+│   │   ├── Cargo.lock           # generated
+│   │   └── src/
+│   │       └── main.rs
+│   └── web/                     # Vite react-ts project
+│       ├── index.html
+│       ├── package.json
+│       ├── tsconfig*.json
+│       ├── vite.config.ts       # tailwindcss + vite-plugin-pwa
+│       ├── public/
+│       │   └── icons (192, 512, maskable, favicon)
+│       └── src/
+│           ├── main.tsx
+│           ├── App.tsx
+│           ├── index.css        # Tailwind v4 import
+│           └── components/
+│               └── Dashboard.tsx
+└── docs/
+    └── superpowers/specs/
+        └── 2026-10-18-phase1-foundation-design.md
+```
+
+Git: initialize a repository in the project root; commit the spec, then the implementation as a follow-up commit(s). `.gitignore` covers `target/`, `node_modules/`, `dist/`, editor/OS noise.
+
+## 6. Desktop Agent Design
+
+**Toolchain:** Rust installed via rustup (user-approved), default stable toolchain (includes `cargo`, `rustc`, `rustfmt`, `clippy`).
+
+**Cargo.toml**
+
+- Package name: `desktop-agent`, version `0.1.0`, edition `2021`.
+- Dependencies added via `cargo add`: `xcap`, `enigo` — latest compatible published versions at implementation time. Declared but unused in Phase 1 code (no capture, no input).
+
+**`src/main.rs` behavior (complete output contract):**
+
+1. Print agent version, e.g. `Desktop Agent v0.1.0` (from `env!("CARGO_PKG_VERSION")`).
+2. Print detected operating system from `std::env::consts::OS` (plus architecture, since it's free and useful on Linux x86_64).
+3. Print `Remote Desktop Agent Ready`.
+4. Exit with status 0.
+
+No modules are created beyond `main.rs` — a single-file entry point with small functions keeps Phase 1 honest; modules appear when there is real logic to place in them.
+
+**Platform note:** XCap and Enigo may require X11 development headers to compile on Linux (e.g. `libx11-dev`, `libxi-dev`, `libxtst-dev`, `libxdo-dev`). The apt packages will be installed **only if** the build fails without them, and every system package installed will be reported.
+
+## 7. Web App Design
+
+**Scaffold:** `npm create vite@latest web -- --template react-ts` (latest stable Vite + React + TypeScript at implementation time).
+
+**Styling:** Tailwind CSS **v4** — install `tailwindcss` + `@tailwindcss/vite`, register the plugin in `vite.config.ts`, `@import "tailwindcss";` in `src/index.css`. No `tailwind.config.js` (v4 convention).
+
+**PWA:** `vite-plugin-pwa` with:
+
+- `registerType: 'autoUpdate'`
+- Manifest: `name: "Connect To Desktop"`, `short_name: "Connect"`, `display: "standalone"`, `start_url: "/"`, theme/background colors, icon set (192×192, 512×512, maskable 512, favicon).
+- Service worker generated by the plugin (Workbox) during `npm run build`; standard `registerSW` registration in app code.
+- Icons: generated as simple on-brand PNGs using a dependency-free script (Node + `zlib` PNG encoding) if no system image tool (`convert`/`magick`) is available. Icons ship in `public/`; the generator is committed at `scripts/generate-icons.mjs` so icons stay reproducible.
+- PWA installability is verified via `npm run build && npm run preview` (manifest + SW served from the production build).
+
+**Dashboard (single page, mobile-first):**
+
+- Header: app name "Connect To Desktop".
+- Connection status indicator: static state `Disconnected` (visual chip/badge; networking does not exist in Phase 1).
+- Empty state card: "No devices connected".
+- "Connect Device" button: renders visibly; on click shows an inline notice — "Device connections arrive in a later phase." — instead of performing any network action.
+- Responsive: looks correct at 360 px phone width and desktop widths; no extra screens, routing, or state libraries.
+
+State is plain React state — no Redux/Zustand/react-query.
+
+## 8. Documentation
+
+**README.md** sections:
+
+1. Project overview (from `PROJECT_IDEA.md`, condensed).
+2. Requirements (Rust via rustup, Node ≥ 20, Linux).
+3. Linux setup instructions (rustup install, `npm install`, any apt libs actually needed).
+4. Development commands table (`cargo run`, `npm run dev`, `npm run build`, `npm run preview`).
+
+## 9. Dependencies (complete list)
+
+| Project | Dependency | Why |
+|---|---|---|
+| desktop-agent | `xcap` | Declared per spec; screen capture in a later phase |
+| desktop-agent | `enigo` | Declared per spec; input control in a later phase |
+| web | `react`, `react-dom`, TS, `vite` | Vite template |
+| web | `tailwindcss`, `@tailwindcss/vite` | Styling |
+| web | `vite-plugin-pwa` | Manifest + service worker |
+
+Nothing else. No UI kits, no icon packs, no state managers.
+
+## 10. Acceptance Criteria
+
+1. `cargo run` (in `apps/desktop-agent`) prints agent version, detected OS/arch, and `Remote Desktop Agent Ready`; exits 0.
+2. `Cargo.toml` declares `xcap` and `enigo`.
+3. `apps/web` scaffolds with Vite + React + TS, Tailwind v4 working, `vite-plugin-pwa` configured.
+4. `npm run build` completes with type-checking; `npm run preview` serves the app with manifest + service worker present.
+5. Dashboard shows app name, connection status, "No devices connected", and "Connect Device" button; responsive at mobile width.
+6. README exists with overview, requirements, Linux setup, dev commands.
+7. No networking/streaming/input-control code anywhere.
+
+## 11. Risks & Open Items
+
+- **XCap/Enigo compile issues on Linux:** mitigated by installing required X11 dev packages only on demand; if a crate version fails to compile, pick the newest mutually compatible versions and report the pin.
+- **App display name:** "Connect To Desktop" (derived from the `connectptod` folder name) is a placeholder decision — trivially renamed during spec review or later.
+- **Rust not previously installed:** rustup installation (~1.5 GB) is user-approved and part of setup.
