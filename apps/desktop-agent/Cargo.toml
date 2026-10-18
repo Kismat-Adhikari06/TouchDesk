@@ -1,0 +1,9 @@
+[package]
+name = "desktop-agent"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+enigo = "0.6.1"
+wayland-sys = { version = "0.31.11", features = ["dlopen"] }
+xcap = "0.9.8"
