@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
-import type { StreamStatus } from '../hooks/useAgentStream'
+import type { RemoteControl, StreamStatus } from '../hooks/useAgentStream'
+import { useTouchControl } from '../hooks/useTouchControl'
+import RemoteKeyboard from './RemoteKeyboard'
 
 interface StreamViewerProps {
   videoRef: RefObject<HTMLVideoElement | null>
   status: StreamStatus
   agentState: string | null
+  control: RemoteControl
   onDisconnect: () => void
 }
 
@@ -51,7 +54,7 @@ function CollapseIcon({ className }: { className?: string }) {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" className={className} fill="none">
       <path
-        d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5"
+        d="M4 9h5V4M20 9h-5v5M4 15h5v5M20 15h-5v-5"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
@@ -61,17 +64,86 @@ function CollapseIcon({ className }: { className?: string }) {
   )
 }
 
-export default function StreamViewer({ videoRef, status, agentState, onDisconnect }: StreamViewerProps) {
+function MouseIcon({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={className} fill="none">
+      <rect x="7" y="3" width="10" height="18" rx="5" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 7v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function KeyboardIcon({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={className} fill="none">
+      <rect x="2" y="6" width="20" height="12" rx="2" stroke="currentColor" strokeWidth="2" />
+      <path
+        d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+export default function StreamViewer({
+  videoRef,
+  status,
+  agentState,
+  control,
+  onDisconnect,
+}: StreamViewerProps) {
   const shellRef = useRef<HTMLElement | null>(null)
+  const stageRef = useRef<HTMLDivElement | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [hasFrames, setHasFrames] = useState(false)
   const [fullscreenBlocked, setFullscreenBlocked] = useState(false)
+  const [mode, setMode] = useState<'view' | 'mouse' | 'keyboard'>('view')
 
-  // Reset frame detection whenever the connection status changes (new session).
+  // Reset frame detection and control mode whenever the connection status
+  // changes (new session).
   const [prevStatus, setPrevStatus] = useState(status)
   if (prevStatus !== status) {
     setPrevStatus(status)
     setHasFrames(false)
+    setMode('view')
+  }
+
+  // Follow external authorization changes (data channel closed, agent
+  // refused control) instead of keeping a stale local mode.
+  const [prevControlEnabled, setPrevControlEnabled] = useState(control.enabled)
+  if (prevControlEnabled !== control.enabled) {
+    setPrevControlEnabled(control.enabled)
+    if (!control.enabled) setMode('view')
+  }
+
+  const touchActive = control.enabled && status === 'live'
+  const { cancel: cancelGestures } = useTouchControl({
+    control,
+    enabled: touchActive,
+    stageRef,
+  })
+
+  const toggleMouse = () => {
+    if (mode === 'mouse') {
+      setMode('view')
+      control.setEnabled(false)
+    } else {
+      cancelGestures()
+      setMode('mouse')
+      control.setEnabled(true)
+    }
+  }
+
+  const toggleKeyboard = () => {
+    if (mode === 'keyboard') {
+      setMode('mouse')
+      return
+    }
+    cancelGestures()
+    setMode('keyboard')
+    control.setEnabled(true)
   }
 
   // "capturing" only means the portal was approved — the approval hint must
@@ -211,7 +283,10 @@ export default function StreamViewer({ videoRef, status, agentState, onDisconnec
       ref={shellRef}
       className="stream-shell w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-lg shadow-black/30"
     >
-      <div className="stream-stage relative aspect-video w-full bg-black">
+      <div
+        ref={stageRef}
+        className={`stream-stage relative aspect-video w-full bg-black ${touchActive ? 'touch-none select-none' : ''}`}
+      >
         <video
           ref={videoRef}
           autoPlay
@@ -246,13 +321,54 @@ export default function StreamViewer({ videoRef, status, agentState, onDisconnec
             <p className="text-xs text-rose-200">Connection interrupted — waiting to recover…</p>
           </div>
         )}
+        {control.enabled && status === 'live' && (
+          <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-1.5 rounded-full border border-indigo-500/40 bg-slate-950/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-indigo-300 backdrop-blur">
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-indigo-400" />
+            Controlling
+          </div>
+        )}
       </div>
+      <RemoteKeyboard
+        open={mode === 'keyboard'}
+        control={control}
+        onClose={() => setMode('mouse')}
+      />
       <div className="stream-footer flex items-center justify-between gap-3 border-t border-slate-800 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
         <span className="flex items-center gap-2 text-xs font-medium text-slate-400">
           <span aria-hidden="true" className={`size-2 rounded-full ${footerDot}`} />
-          {footerLabel}
+          <span className="max-sm:hidden">{footerLabel}</span>
         </span>
         <div className="flex items-center gap-2">
+          {status === 'live' && control.available && (
+            <>
+              <button
+                type="button"
+                onClick={toggleMouse}
+                aria-pressed={mode === 'mouse'}
+                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 ${
+                  mode === 'mouse' || mode === 'keyboard'
+                    ? 'border-indigo-500 bg-indigo-600 text-white'
+                    : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                <MouseIcon className="size-3.5" />
+                <span className="max-xs:hidden">Mouse</span>
+              </button>
+              <button
+                type="button"
+                onClick={toggleKeyboard}
+                aria-pressed={mode === 'keyboard'}
+                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 ${
+                  mode === 'keyboard'
+                    ? 'border-indigo-500 bg-indigo-600 text-white'
+                    : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                <KeyboardIcon className="size-3.5" />
+                <span className="max-xs:hidden">Keys</span>
+              </button>
+            </>
+          )}
           {showFsButton && (
             <button
               type="button"

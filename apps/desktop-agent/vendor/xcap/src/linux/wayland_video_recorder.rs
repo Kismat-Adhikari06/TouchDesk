@@ -134,6 +134,10 @@ impl ScreenCast<'_> {
         options.insert("handle_token", Value::from(handle_token));
         options.insert("types", Value::from(1_u32));
         options.insert("multiple", Value::from(false));
+        // XDG Portal CursorMode: 1 = hidden, 2 = embedded, 3 = metadata.
+        // Request the compositor to draw the pointer into the captured frames
+        // so the viewer can see where the remote cursor is.
+        options.insert("cursor_mode", Value::from(2_u32));
 
         self.proxy
             .call_method("SelectSources", &(session, options))?;

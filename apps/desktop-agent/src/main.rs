@@ -1,5 +1,6 @@
 mod capture;
 mod encode;
+mod input;
 mod peer;
 mod signaling;
 
@@ -132,14 +133,25 @@ async fn main() -> anyhow::Result<()> {
         local.ip().to_string()
     };
 
-    let state = signaling::AppState::new(AgentSettings {
-        pin: pin.clone(),
-        stream: StreamConfig {
-            fps: args.fps,
-            max_width: args.max_width,
-            bitrate: args.bitrate,
+    let input_info = input::init();
+    println!("{}", input_info.status);
+    if input_info.handle.available {
+        println!("Remote control is available from the viewer.");
+    } else {
+        println!("Remote control is unavailable on this setup; the viewer stays read-only.");
+    }
+
+    let state = signaling::AppState::new(
+        AgentSettings {
+            pin: pin.clone(),
+            stream: StreamConfig {
+                fps: args.fps,
+                max_width: args.max_width,
+                bitrate: args.bitrate,
+            },
         },
-    });
+        input_info.handle,
+    );
 
     println!("Listening on {}", listener.local_addr().unwrap_or(local));
     println!("PIN: {pin}");

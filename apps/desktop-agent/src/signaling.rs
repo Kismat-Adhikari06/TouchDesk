@@ -1,4 +1,5 @@
 use crate::capture::StreamConfig;
+use crate::input::InputHandle;
 use crate::peer::{SessionCommand, SessionGuard, create_session, spawn_supervisor};
 use axum::Router;
 use axum::extract::State;
@@ -28,15 +29,17 @@ pub struct AgentSettings {
 pub struct AppState {
     pub settings: AgentSettings,
     pub busy: Arc<AtomicBool>,
+    pub input: InputHandle,
     auth_failures: AtomicU32,
     locked_until_ms: AtomicU64,
 }
 
 impl AppState {
-    pub fn new(settings: AgentSettings) -> Arc<Self> {
+    pub fn new(settings: AgentSettings, input: InputHandle) -> Arc<Self> {
         Arc::new(Self {
             settings,
             busy: Arc::new(AtomicBool::new(false)),
+            input,
             auth_failures: AtomicU32::new(0),
             locked_until_ms: AtomicU64::new(0),
         })
@@ -152,6 +155,7 @@ async fn start_stream(
         guard,
         out,
         command_rx,
+        state.input.clone(),
     );
     Ok((handle, command_tx))
 }

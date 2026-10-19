@@ -118,12 +118,13 @@ export default function Dashboard() {
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-4 py-8 sm:px-6">
         {streaming ? (
-          <StreamViewer
-            videoRef={stream.videoRef}
-            status={stream.status}
-            agentState={stream.agentState}
-            onDisconnect={stream.disconnect}
-          />
+            <StreamViewer
+              videoRef={stream.videoRef}
+              status={stream.status}
+              agentState={stream.agentState}
+              control={stream.control}
+              onDisconnect={stream.disconnect}
+            />
         ) : (
           <section className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center shadow-lg shadow-black/30 sm:p-8">
             <MonitorGlyph className="mx-auto size-14 text-slate-600" />

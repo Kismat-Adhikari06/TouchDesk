@@ -1,5 +1,6 @@
 use crate::capture::{self, StreamConfig};
 use crate::encode::EncodedFrame;
+use crate::input::{self, ControlMessage, InputHandle};
 use anyhow::Context;
 use bytes::Bytes;
 use rtc::media::Sample;
@@ -14,6 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, channel};
 use tokio::sync::watch;
+use webrtc::data_channel::{DataChannel, DataChannelEvent};
 use webrtc::media_stream::MediaStreamTrack;
 use webrtc::media_stream::Track;
 use webrtc::media_stream::track_local::TrackLocal;
@@ -63,6 +65,7 @@ pub struct StreamSession {
     pub pc: Arc<dyn PeerConnectionTrait>,
     pub track: Arc<TrackLocalStaticSample>,
     sender: Arc<dyn RtpSender>,
+    control: Arc<dyn DataChannel>,
 }
 
 struct SignalingEvents {
@@ -142,8 +145,23 @@ pub async fn create_session(
     let sender = pc
         .add_track(Arc::clone(&track) as Arc<dyn TrackLocal>)
         .await?;
+    // Data channel for remote-control messages. Created before the offer so
+    // it is negotiated together with the video in the same session; it is
+    // only usable after the PIN-authenticated viewer enables control.
+    let control = pc
+        .create_data_channel("control", None)
+        .await
+        .context("creating the control data channel")?;
 
-    Ok((StreamSession { pc, track, sender }, state_rx))
+    Ok((
+        StreamSession {
+            pc,
+            track,
+            sender,
+            control,
+        },
+        state_rx,
+    ))
 }
 
 async fn negotiated_payload_type(sender: &Arc<dyn RtpSender>) -> anyhow::Result<u8> {
@@ -185,9 +203,44 @@ pub fn spawn_supervisor(
     guard: SessionGuard,
     out: UnboundedSender<Value>,
     mut commands: UnboundedReceiver<SessionCommand>,
+    input: InputHandle,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let pc = session.pc.clone();
+
+        // Forward control-channel messages to the input thread until the
+        // channel closes or the session ends.
+        let control = session.control.clone();
+        let input_for_dc = input.clone();
+        let dc_task = tokio::spawn(async move {
+            while let Some(event) = control.poll().await {
+                match event {
+                    DataChannelEvent::OnOpen => {
+                        let info = json!({
+                            "type": "info",
+                            "width": input_for_dc.width,
+                            "height": input_for_dc.height,
+                            "control": input_for_dc.available,
+                        });
+                        let _ = control.send_text(&info.to_string()).await;
+                    }
+                    DataChannelEvent::OnMessage(msg) => {
+                        let text = String::from_utf8_lossy(&msg.data);
+                        match serde_json::from_str::<ControlMessage>(&text) {
+                            Ok(message) => {
+                                input_for_dc.send(input::InputCommand::Message(message));
+                            }
+                            Err(err) => {
+                                eprintln!("[input] rejected malformed control message: {err}");
+                            }
+                        }
+                    }
+                    DataChannelEvent::OnClose => break,
+                    _ => {}
+                }
+            }
+            input_for_dc.release_all();
+        });
 
         // Negotiation phase: the client's answer and ICE candidates arrive
         // while we wait for the connection, so commands are handled here too.
@@ -234,6 +287,8 @@ pub fn spawn_supervisor(
                     Some(SessionCommand::Stop) | None => {
                         let _ = pc.close().await;
                         let _ = out.send(json!({"type": "stopped"}));
+                        dc_task.abort();
+                        input.release_all();
                         drop(guard);
                         return;
                     }
@@ -243,6 +298,8 @@ pub fn spawn_supervisor(
         if let Some(message) = failure {
             let _ = out.send(json!({"type": "error", "message": message}));
             let _ = pc.close().await;
+            dc_task.abort();
+            input.release_all();
             drop(guard);
             return;
         }
@@ -254,6 +311,8 @@ pub fn spawn_supervisor(
                 let _ =
                     out.send(json!({"type": "error", "message": "Stream setup failed: no SSRC."}));
                 let _ = pc.close().await;
+                dc_task.abort();
+                input.release_all();
                 drop(guard);
                 return;
             }
@@ -265,6 +324,8 @@ pub fn spawn_supervisor(
                     json!({"type": "error", "message": format!("Stream setup failed: {err:#}")}),
                 );
                 let _ = pc.close().await;
+                dc_task.abort();
+                input.release_all();
                 drop(guard);
                 return;
             }
@@ -363,6 +424,8 @@ pub fn spawn_supervisor(
         {
             writer.abort();
         }
+        dc_task.abort();
+        input.release_all();
         let _ = pc.close().await;
         let _ = out.send(json!({"type": "stopped"}));
         drop(guard);

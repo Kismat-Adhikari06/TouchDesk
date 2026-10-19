@@ -2,6 +2,25 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 export type StreamStatus = 'idle' | 'connecting' | 'live' | 'stopped' | 'error'
 
+export type ControlButton = 'left' | 'right' | 'middle'
+
+export interface RemoteControl {
+  /** The computer reported that it can simulate input. */
+  available: boolean
+  /** Remote control is currently authorized for this session. */
+  enabled: boolean
+  /** Remote screen size in pixels (0x0 when unknown). */
+  remoteWidth: number
+  remoteHeight: number
+  setEnabled: (on: boolean) => void
+  sendMove: (dx: number, dy: number) => void
+  sendScroll: (dx: number, dy: number) => void
+  sendButton: (button: ControlButton, state: 'down' | 'up') => void
+  sendClick: (button: ControlButton, double?: boolean) => void
+  sendText: (text: string) => void
+  sendKey: (key: string, state: 'down' | 'up') => void
+}
+
 interface AgentMessage {
   type?: string
   message?: string
@@ -24,6 +43,9 @@ export function useAgentStream() {
   const [status, setStatus] = useState<StreamStatus>('idle')
   const [agentState, setAgentState] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [controlAvailable, setControlAvailable] = useState(false)
+  const [controlEnabled, setControlEnabled] = useState(false)
+  const [remoteSize, setRemoteSize] = useState({ width: 0, height: 0 })
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
@@ -32,10 +54,117 @@ export function useAgentStream() {
   const intentionalCloseRef = useRef(false)
   const chainRef = useRef<Promise<void>>(Promise.resolve())
 
+  const controlChannelRef = useRef<RTCDataChannel | null>(null)
+  const controlEnabledRef = useRef(false)
+  const moveBufferRef = useRef({ dx: 0, dy: 0 })
+  const scrollBufferRef = useRef({ dx: 0, dy: 0 })
+  const moveScheduledRef = useRef(false)
+  const scrollScheduledRef = useRef(false)
+
   const setPhase = useCallback((next: StreamStatus) => {
     statusRef.current = next
     setStatus(next)
   }, [])
+
+  const sendControl = useCallback((payload: Record<string, unknown>) => {
+    const dc = controlChannelRef.current
+    if (!dc || dc.readyState !== 'open') return
+    try {
+      dc.send(JSON.stringify(payload))
+    } catch {
+      // The channel died between the readyState check and the send.
+    }
+  }, [])
+
+  const setEnabled = useCallback(
+    (on: boolean) => {
+      controlEnabledRef.current = on
+      if (!on) {
+        moveBufferRef.current = { dx: 0, dy: 0 }
+        scrollBufferRef.current = { dx: 0, dy: 0 }
+      }
+      sendControl({ type: 'control', enabled: on })
+      setControlEnabled(on)
+    },
+    [sendControl],
+  )
+
+  // Moves and scrolls are coalesced to one message per animation frame.
+  const sendMove = useCallback(
+    (dx: number, dy: number) => {
+      if (!controlEnabledRef.current) return
+      moveBufferRef.current.dx += dx
+      moveBufferRef.current.dy += dy
+      if (moveScheduledRef.current) return
+      moveScheduledRef.current = true
+      requestAnimationFrame(() => {
+        moveScheduledRef.current = false
+        const { dx: bufferedX, dy: bufferedY } = moveBufferRef.current
+        moveBufferRef.current = { dx: 0, dy: 0 }
+        if (bufferedX === 0 && bufferedY === 0) return
+        sendControl({
+          type: 'move',
+          dx: Math.round(bufferedX),
+          dy: Math.round(bufferedY),
+        })
+      })
+    },
+    [sendControl],
+  )
+
+  const sendScroll = useCallback(
+    (dx: number, dy: number) => {
+      if (!controlEnabledRef.current) return
+      scrollBufferRef.current.dx += dx
+      scrollBufferRef.current.dy += dy
+      if (scrollScheduledRef.current) return
+      scrollScheduledRef.current = true
+      requestAnimationFrame(() => {
+        scrollScheduledRef.current = false
+        const { dx: bufferedX, dy: bufferedY } = scrollBufferRef.current
+        scrollBufferRef.current = { dx: 0, dy: 0 }
+        if (bufferedX === 0 && bufferedY === 0) return
+        sendControl({
+          type: 'scroll',
+          dx: Math.round(bufferedX),
+          dy: Math.round(bufferedY),
+        })
+      })
+    },
+    [sendControl],
+  )
+
+  const sendButton = useCallback(
+    (button: ControlButton, state: 'down' | 'up') => {
+      if (!controlEnabledRef.current) return
+      sendControl({ type: 'button', button, state })
+    },
+    [sendControl],
+  )
+
+  const sendClick = useCallback(
+    (button: ControlButton, double?: boolean) => {
+      if (!controlEnabledRef.current) return
+      sendControl({ type: 'click', button, double: double ?? false })
+    },
+    [sendControl],
+  )
+
+  const sendText = useCallback(
+    (text: string) => {
+      if (!controlEnabledRef.current || !text) return
+      sendControl({ type: 'text', text })
+    },
+    [sendControl],
+  )
+
+  const sendKey = useCallback(
+    (key: string, state: 'down' | 'up') => {
+      if (!controlEnabledRef.current) return
+      sendControl({ type: 'key', key, state })
+    },
+    [sendControl],
+  )
 
   const teardown = useCallback(() => {
     intentionalCloseRef.current = true
@@ -44,6 +173,17 @@ export function useAgentStream() {
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
       ws.close()
     }
+    const dc = controlChannelRef.current
+    controlChannelRef.current = null
+    controlEnabledRef.current = false
+    try {
+      dc?.close()
+    } catch {
+      // Already gone.
+    }
+    setControlEnabled(false)
+    setControlAvailable(false)
+    setRemoteSize({ width: 0, height: 0 })
     const pc = pcRef.current
     pcRef.current = null
     pc?.close()
@@ -120,6 +260,58 @@ export function useAgentStream() {
             }
             pc.onicecandidate = (event) => {
               if (event.candidate) send({ type: 'ice', candidate: event.candidate.toJSON() })
+            }
+            pc.ondatachannel = (event) => {
+              const dc = event.channel
+              if (dc.label !== 'control') {
+                try {
+                  dc.close()
+                } catch {
+                  // Ignore channels we do not use.
+                }
+                return
+              }
+              controlChannelRef.current = dc
+              dc.onopen = () => {
+                // Re-assert the last authorization state if the channel reopens.
+                if (controlEnabledRef.current) {
+                  const dc2 = controlChannelRef.current
+                  if (dc2 && dc2.readyState === 'open') {
+                    try {
+                      dc2.send(JSON.stringify({ type: 'control', enabled: true }))
+                    } catch {
+                      // ignore
+                    }
+                  }
+                }
+              }
+              dc.onclose = () => {
+                if (controlChannelRef.current === dc) {
+                  controlChannelRef.current = null
+                }
+                controlEnabledRef.current = false
+                setControlEnabled(false)
+              }
+              dc.onmessage = (dcEvent) => {
+                if (typeof dcEvent.data !== 'string') return
+                try {
+                  const msg = JSON.parse(dcEvent.data) as {
+                    type?: string
+                    width?: number
+                    height?: number
+                    control?: boolean
+                  }
+                  if (msg.type === 'info') {
+                    setControlAvailable(Boolean(msg.control))
+                    setRemoteSize({
+                      width: typeof msg.width === 'number' ? msg.width : 0,
+                      height: typeof msg.height === 'number' ? msg.height : 0,
+                    })
+                  }
+                } catch {
+                  // Ignore malformed messages from the agent.
+                }
+              }
             }
             await pc.setRemoteDescription({ type: 'offer', sdp: msg.sdp })
             const answer = await pc.createAnswer()
@@ -210,5 +402,19 @@ export function useAgentStream() {
 
   useEffect(() => teardown, [teardown])
 
-  return { status, agentState, error, videoRef, connect, disconnect }
+  const control: RemoteControl = {
+    available: controlAvailable,
+    enabled: controlEnabled,
+    remoteWidth: remoteSize.width,
+    remoteHeight: remoteSize.height,
+    setEnabled,
+    sendMove,
+    sendScroll,
+    sendButton,
+    sendClick,
+    sendText,
+    sendKey,
+  }
+
+  return { status, agentState, error, videoRef, control, connect, disconnect }
 }

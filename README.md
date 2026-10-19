@@ -100,7 +100,7 @@ The web app is a PWA: production builds ship a web app manifest and service work
 
 - **Local network only.** Both devices must be on the same LAN; there is no relay/TURN server yet.
 - **One viewer at a time.** A second connection receives "Another viewer is already connected."
-- **View-only.** Mouse/keyboard control arrives in Phase 3.
+- **Mouse/keyboard control (Phase 3).** Trackpad-style gestures and an on-screen keyboard let you control the desktop remotely. Enable "Mouse" or "Keys" on the viewer (control is only active while in those modes). Held keys/buttons are released automatically when the session ends. The cursor is embedded into the captured stream where the compositor supports it.
 - **Wayland re-approval.** Each stream opens the portal dialog again; approvals are not remembered.
 - **Idle screens may freeze.** GNOME delivers screencast frames on demand — a completely static desktop may emit no new frames (the video holds the last frame). Any change resumes the stream.
 - **PWA install needs HTTPS.** The dashboard works over plain `http://` on the LAN, but service-worker install requires a secure context — serve `apps/web/dist` behind HTTPS (e.g. Caddy/nginx) to install it on a phone. WebRTC itself does not require HTTPS.
@@ -119,5 +119,5 @@ The web app is a PWA: production builds ship a web app manifest and service work
 
 1. **Phase 1 — Foundation:** monorepo, runnable Rust agent, installable PWA dashboard. ✅
 2. **Phase 2 — Streaming:** WebRTC screen capture streaming over local Wi-Fi. ✅
-3. **Phase 3 — Control:** remote mouse/keyboard input via WebRTC DataChannel.
+3. **Phase 3 — Control:** remote mouse/keyboard input via WebRTC DataChannel with trackpad-style gestures and on-screen keyboard, cursor embedding, and safe cleanup on disconnect.
 4. **Phase 4 — Pairing & access:** secure device pairing, authentication, optional internet access.
