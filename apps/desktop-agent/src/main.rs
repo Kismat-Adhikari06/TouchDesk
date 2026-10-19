@@ -21,9 +21,10 @@ impl Default for Args {
     fn default() -> Self {
         Self {
             bind: "0.0.0.0:8080".to_owned(),
-            fps: 30,
-            max_width: 1280,
-            bitrate: 2_000_000,
+            // Tuned for low latency on phones; raise for sharper local viewing.
+            fps: 15,
+            max_width: 854,
+            bitrate: 900_000,
             pin: None,
         }
     }
@@ -35,9 +36,9 @@ Usage: desktop-agent [options]
 
 Options:
   --bind <addr:port>    listen address (default 0.0.0.0:8080)
-  --fps <n>             stream frame rate (default 30)
-  --max-width <n>       max stream width in pixels (default 1280)
-  --bitrate <bps>       video bitrate in bits per second (default 2000000)
+  --fps <n>             stream frame rate (default 15)
+  --max-width <n>       max stream width in pixels (default 854)
+  --bitrate <bps>       video bitrate in bits per second (default 900000)
   --pin <pin>           fixed PIN (default: random each run)
   --help                show this help"
 }

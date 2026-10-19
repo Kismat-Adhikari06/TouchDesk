@@ -75,9 +75,11 @@ Agent options:
 |---|---|---|
 | `--bind <ip:port>` | `0.0.0.0:8080` | Listen address |
 | `--pin <digits>` | random | Fixed PIN instead of a random one |
-| `--fps <1-60>` | `30` | Target frame rate |
-| `--max-width <px>` | `1280` | Downscale the capture to this width (height keeps aspect) |
-| `--bitrate <kbps>` | `2500` | Encoder bitrate |
+| `--fps <1-120>` | `15` | Target frame rate |
+| `--max-width <px>` | `854` | Downscale the capture to this width (height keeps aspect) |
+| `--bitrate <bps>` | `900000` | Encoder bitrate |
+
+Defaults are tuned for low latency on phones over Wi-Fi (~0.9 Mbps, 854px, 15 fps). On a strong LAN you can raise them, e.g. `cargo run --release -- --fps 30 --max-width 1280 --bitrate 2500000`; if a phone still lags, drop to `--fps 12 --bitrate 600000`.
 
 ## Development commands
 

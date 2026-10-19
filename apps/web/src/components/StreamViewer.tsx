@@ -268,9 +268,9 @@ export default function StreamViewer({
   // Shown until a fullscreen attempt fails (restricted browser/iframe), then hidden.
   const showFsButton = !fullscreenBlocked
   const footerDot = approvalNeeded
-    ? 'bg-amber-400 animate-pulse'
+    ? 'bg-amber-400'
     : starting
-      ? 'bg-indigo-400 animate-pulse'
+      ? 'bg-indigo-400'
       : 'bg-emerald-400'
   const footerLabel = approvalNeeded
     ? 'Waiting for approval…'
@@ -281,7 +281,7 @@ export default function StreamViewer({
   return (
     <section
       ref={shellRef}
-      className="stream-shell w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-lg shadow-black/30"
+      className="stream-shell w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-800 bg-slate-900"
     >
       <div
         ref={stageRef}
@@ -302,27 +302,27 @@ export default function StreamViewer({
           </div>
         )}
         {approvalNeeded && (
-          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-slate-950/85 px-4 py-2.5 backdrop-blur">
-            <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-amber-400" />
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-slate-950/95 px-4 py-2.5">
+            <span aria-hidden="true" className="size-2 rounded-full bg-amber-400" />
             <p className="text-xs text-amber-200">
               Approve the screen-share dialog on the computer to start the stream.
             </p>
           </div>
         )}
         {starting && (
-          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-slate-950/85 px-4 py-2.5 backdrop-blur">
-            <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-indigo-400" />
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-slate-950/95 px-4 py-2.5">
+            <span aria-hidden="true" className="size-2 rounded-full bg-indigo-400" />
             <p className="text-xs text-indigo-200">Approval received — waiting for the first frame…</p>
           </div>
         )}
         {showInterrupted && (
-          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-slate-950/85 px-4 py-2.5 backdrop-blur">
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-slate-950/95 px-4 py-2.5">
             <span aria-hidden="true" className="size-2 rounded-full bg-rose-400" />
             <p className="text-xs text-rose-200">Connection interrupted — waiting to recover…</p>
           </div>
         )}
         {control.enabled && status === 'live' && (
-          <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-1.5 rounded-full border border-indigo-500/40 bg-slate-950/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-indigo-300 backdrop-blur">
+          <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-1.5 rounded-full border border-indigo-500/40 bg-slate-950/85 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-indigo-300">
             <span aria-hidden="true" className="size-1.5 rounded-full bg-indigo-400" />
             Controlling
           </div>

@@ -16,7 +16,7 @@ const STATUS_META: Record<
   },
   connecting: {
     label: 'Connecting',
-    dot: 'bg-indigo-400 animate-pulse',
+    dot: 'bg-indigo-400',
     text: 'text-indigo-200',
     border: 'border-indigo-800 bg-indigo-950',
   },
@@ -94,7 +94,7 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur">
+      <header className="border-b border-slate-800 bg-slate-900">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-2.5">
             <img
@@ -126,7 +126,7 @@ export default function Dashboard() {
               onDisconnect={stream.disconnect}
             />
         ) : (
-          <section className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center shadow-lg shadow-black/30 sm:p-8">
+          <section className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center sm:p-8">
             <MonitorGlyph className="mx-auto size-14 text-slate-600" />
             <h2 className="mt-4 text-lg font-semibold text-slate-100">Connect to your computer</h2>
             <p className="mt-1 text-sm text-slate-400">

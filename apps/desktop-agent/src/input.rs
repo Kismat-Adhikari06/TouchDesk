@@ -17,13 +17,33 @@ const MAX_TEXT_CHARS: usize = 256;
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ControlMessage {
-    Control { enabled: bool },
-    Move { dx: i32, dy: i32 },
-    Button { button: String, state: String },
-    Click { button: String, #[serde(default)] double: bool },
-    Scroll { dx: i32, dy: i32 },
-    Text { text: String },
-    Key { key: String, state: String },
+    Control {
+        enabled: bool,
+    },
+    Move {
+        dx: i32,
+        dy: i32,
+    },
+    Button {
+        button: String,
+        state: String,
+    },
+    Click {
+        button: String,
+        #[serde(default)]
+        double: bool,
+    },
+    Scroll {
+        dx: i32,
+        dy: i32,
+    },
+    Text {
+        text: String,
+    },
+    Key {
+        key: String,
+        state: String,
+    },
 }
 
 pub enum InputCommand {
@@ -184,7 +204,9 @@ impl Engine {
                 }
                 self.control_enabled = enabled;
                 if enabled {
-                    eprintln!("[input] remote control ACTIVE — the viewer can move the mouse and type");
+                    eprintln!(
+                        "[input] remote control ACTIVE — the viewer can move the mouse and type"
+                    );
                 } else {
                     eprintln!("[input] remote control ended");
                     self.release_held();
@@ -452,17 +474,11 @@ mod tests {
     fn parses_control_messages_from_json() {
         let move_msg: ControlMessage =
             serde_json::from_str(r#"{"type":"move","dx":3,"dy":-7}"#).unwrap();
-        assert!(matches!(
-            move_msg,
-            ControlMessage::Move { dx: 3, dy: -7 }
-        ));
+        assert!(matches!(move_msg, ControlMessage::Move { dx: 3, dy: -7 }));
 
         let click: ControlMessage =
             serde_json::from_str(r#"{"type":"click","button":"left","double":true}"#).unwrap();
-        assert!(matches!(
-            click,
-            ControlMessage::Click { double: true, .. }
-        ));
+        assert!(matches!(click, ControlMessage::Click { double: true, .. }));
 
         let click_minimal: ControlMessage =
             serde_json::from_str(r#"{"type":"click","button":"right"}"#).unwrap();
